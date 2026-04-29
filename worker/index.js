@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker — 高公局交通資料庫代理 v4
+ * Cloudflare Worker — 高公局交通資料庫代理 v41
  * 資料來源：tisvcloud.freeway.gov.tw（免費，不需要 API 金鑰）
  * Worker 負責：
  *   1. 呼叫高公局 XML API
