@@ -1,302 +1,116 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>台灣高速公路路況查詢</title>
-<style>
-:root {
-  --bg:#F4F6F9; --surface:#fff; --border:#DDE3EC;
-  --text:#1A1D23; --muted:#6B7280;
-  --green:#0A6648; --green-bg:#E3F5EE; --green-border:#5DCAA5;
-  --warn:#B45309; --warn-bg:#FEF3C7;
-  --danger:#991B1B; --danger-bg:#FEE2E2;
-  --blue:#1A56DB; --blue-bg:#EBF5FF;
-  --r:10px; --shadow:0 1px 4px rgba(0,0,0,.08);
-}
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.6;}
-a{color:var(--green);}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>國道即時路況快檢</title>
+    <style>
+        body { font-family: -apple-system, "Microsoft JhengHei", sans-serif; background-color: #f4f4f9; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; }
+        .search-box { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        
+        .traffic-table { width: 100%; border-collapse: collapse; }
+        .traffic-table th, .traffic-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .traffic-table th { background-color: #f8f9fa; }
 
-/* ── Layout ── */
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:.75rem 1.5rem;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:10;box-shadow:var(--shadow);}
-.topbar h1{font-size:16px;font-weight:600;flex:1;}
-.badge{font-size:11px;background:var(--green-bg);color:var(--green);padding:2px 10px;border-radius:20px;border:1px solid var(--green-border);}
-.status-dot{width:8px;height:8px;border-radius:50%;background:#ccc;flex-shrink:0;}
-.status-dot.ok{background:#22c55e;}
-.status-dot.err{background:#ef4444;}
-
-.main{max-width:900px;margin:0 auto;padding:1.5rem 1rem 4rem;}
-
-/* ── Cards ── */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);}
-.card-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
-
-/* ── Form ── */
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.grid4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;}
-@media(max-width:600px){.grid2,.grid4{grid-template-columns:1fr 1fr;}}
-label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px;}
-select,input{width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);}
-select:focus,input:focus{outline:none;border-color:var(--green-border);box-shadow:0 0 0 3px rgba(90,200,160,.15);}
-
-/* ── Buttons ── */
-.btns{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
-.btn{padding:8px 18px;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;transition:background .12s;}
-.btn:hover{background:var(--bg);}
-.btn.primary{background:var(--green-bg);border-color:var(--green-border);color:var(--green);}
-.btn.primary:hover{background:#b3e8d0;}
-.btn:disabled{opacity:.4;cursor:not-allowed;}
-
-/* ── Tabs ── */
-.tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0;}
-.tab{padding:8px 16px;font-size:13px;font-weight:500;border-radius:8px 8px 0 0;cursor:pointer;color:var(--muted);border:1px solid transparent;border-bottom:none;margin-bottom:-1px;}
-.tab.active{background:var(--surface);border-color:var(--border);color:var(--green);}
-
-/* ── Speed grid ── */
-.speed-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
-.speed-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
-.speed-km{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.speed-val{font-size:26px;font-weight:700;line-height:1.1;margin:2px 0;}
-.speed-unit{font-size:13px;font-weight:400;}
-.chip{font-size:11px;padding:1px 8px;border-radius:4px;display:inline-block;margin-top:3px;}
-.chip-good{background:var(--green-bg);color:var(--green);}
-.chip-warn{background:var(--warn-bg);color:var(--warn);}
-.chip-bad{background:var(--danger-bg);color:var(--danger);}
-.speed-val.c-good{color:var(--green);}
-.speed-val.c-warn{color:var(--warn);}
-.speed-val.c-bad{color:var(--danger);}
-
-/* ── Incident list ── */
-.incident{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;background:var(--surface);}
-.incident-meta{font-size:11px;color:var(--muted);margin-bottom:4px;}
-.incident-type{font-weight:600;margin-bottom:2px;}
-.incident-desc{font-size:12px;color:var(--muted);}
-
-/* ── Result header ── */
-.r-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:12px;}
-.r-head strong{font-size:14px;color:var(--text);}
-
-/* ── Misc ── */
-.loading{color:var(--muted);padding:12px 0;font-size:13px;}
-.err-msg{color:var(--danger);padding:10px 0;font-size:13px;}
-.ok-msg{color:var(--green);padding:10px 0;font-size:13px;}
-.raw summary{font-size:12px;color:var(--muted);cursor:pointer;margin-top:10px;}
-.raw pre{font-family:monospace;font-size:11px;background:var(--bg);border-radius:8px;padding:10px;max-height:200px;overflow:auto;margin-top:6px;white-space:pre;border:1px solid var(--border);}
-
-.setup-box{background:var(--blue-bg);border:1px solid #93C5FD;border-radius:var(--r);padding:1rem 1.25rem;font-size:13px;line-height:1.9;color:#1E3A5F;}
-.setup-box h3{font-size:14px;margin-bottom:6px;color:var(--blue);}
-.setup-box ol{margin-left:18px;}
-.setup-box code{background:#fff;padding:1px 5px;border-radius:4px;font-family:monospace;font-size:12px;border:1px solid #CBD5E1;}
-</style>
+        .speed-tag { padding: 4px 8px; border-radius: 4px; font-weight: bold; color: white; text-align: center; display: inline-block; min-width: 40px; }
+        .speed-green { background-color: #28a745; }
+        .speed-orange { background-color: #fd7e14; }
+        .speed-red { background-color: #dc3545; }
+        
+        .update-time { font-size: 12px; color: #888; text-align: right; margin-bottom: 10px; }
+        .loading { text-align: center; color: #666; padding: 20px; font-weight: bold; }
+        .error { color: #dc3545; text-align: center; padding: 10px; font-weight: bold; }
+    </style>
 </head>
 <body>
 
-<div class="topbar">
-  <span style="font-size:20px;">🛣</span>
-  <h1>台灣高速公路路況查詢</h1>
-  <span class="badge">TDX 官方資料</span>
-  <span class="status-dot" id="dot" title="Worker 狀態"></span>
+<div class="container">
+    <h1>🛣️ 國道即時路況快檢</h1>
+    <div id="updateTime" class="update-time">等待獲取資料...</div>
+    <input type="text" id="search" class="search-box" placeholder="輸入道路名稱或地名 (如：國1, 桃園, 圓山)...">
+    
+    <div id="loading" class="loading">正在向伺服器獲取即時數據...</div>
+    
+    <table class="traffic-table" id="trafficTable" style="display:none;">
+        <thead>
+            <tr>
+                <th>路段名稱</th>
+                <th>方向</th>
+                <th>即時時速</th>
+            </tr>
+        </thead>
+        <tbody id="trafficBody">
+            <!-- 資料會插入到這裡 -->
+        </tbody>
+    </table>
 </div>
 
-<div class="main">
-
-  <!-- 查詢條件 -->
-  <div class="card">
-    <div class="card-title">查詢條件</div>
-    <div class="grid4">
-      <div>
-        <label>國道</label>
-        <select id="road">
-          <option value="1">國道1號（中山）</option>
-          <option value="3">國道3號（福爾摩沙）</option>
-          <option value="5">國道5號（蔣渭水）</option>
-          <option value="2">國道2號</option>
-          <option value="4">國道4號</option>
-          <option value="6">國道6號</option>
-          <option value="10">國道10號</option>
-        </select>
-      </div>
-      <div>
-        <label>方向</label>
-        <select id="direction">
-          <option value="N">北上 / 東向</option>
-          <option value="S">南下 / 西向</option>
-        </select>
-      </div>
-      <div>
-        <label>起始里程（公里）</label>
-        <input type="number" id="kmFrom" placeholder="全段" min="0" max="500"/>
-      </div>
-      <div>
-        <label>結束里程（公里）</label>
-        <input type="number" id="kmTo" placeholder="全段" min="0" max="500"/>
-      </div>
-    </div>
-    <div class="btns">
-      <button class="btn primary" onclick="query('speed')">🚗 即時車速</button>
-      <button class="btn" onclick="query('incident')">⚠️ 事故 / 施工</button>
-      <button class="btn" onclick="query('vd')">📡 VD 偵測器</button>
-      <button class="btn" onclick="ping()" style="margin-left:auto;">🔌 測試連線</button>
-    </div>
-  </div>
-
-  <!-- 結果 -->
-  <div id="result"></div>
-
-  <!-- 部署說明 -->
-  <div class="setup-box" id="setup">
-    <h3>🚀 部署步驟（一次設定，永久使用）</h3>
-    <ol>
-      <li>前往 <a href="https://dash.cloudflare.com" target="_blank">dash.cloudflare.com</a> 免費註冊帳號</li>
-      <li>Workers &amp; Pages → <strong>Create Worker</strong> → 貼上 <code>worker/index.js</code> → Deploy</li>
-      <li>Worker → Settings → <strong>Variables</strong> → 新增：<br>
-        <code>TDX_CLIENT_ID</code> = 你的 Client ID<br>
-        <code>TDX_CLIENT_SECRET</code> = 你的 Client Secret
-      </li>
-      <li>複製 Worker URL（如 <code>https://tdx-highway.xxx.workers.dev</code>）</li>
-      <li>開啟 <code>docs/config.js</code>，填入 <code>WORKER_URL</code></li>
-      <li>將整個 <code>docs/</code> 資料夾推送到 GitHub，開啟 GitHub Pages 即完成</li>
-    </ol>
-    <div style="margin-top:8px;font-size:12px;color:#2563EB;">✅ Cloudflare Workers 免費方案：每日 10 萬次請求，完全足夠個人使用</div>
-  </div>
-
-</div>
-
-<script src="config.js"></script>
 <script>
-const roadName = {1:'國道1號',2:'國道2號',3:'國道3號',4:'國道4號',5:'國道5號',6:'國道6號',10:'國道10號'};
+    // ==========================================
+    // ⚠️ 填入你剛剛部署的 Cloudflare Worker 網址
+    // ==========================================
+    const WORKER_API_URL = '[https://your-worker.your-name.workers.dev/](https://your-worker.your-name.workers.dev/)';
+    
+    let trafficData = []; // 儲存從 Worker 拿到的資料
 
-function qs(id){ return document.getElementById(id); }
+    async function fetchTrafficData() {
+        try {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('trafficTable').style.display = 'none';
 
-function setResult(html){
-  qs('result').innerHTML = html;
-  qs('setup').style.display = 'none';
-}
+            // 直接向自己的 Worker 拿處理好的資料
+            const response = await fetch(WORKER_API_URL);
+            if (!response.ok) throw new Error("伺服器回應錯誤");
+            
+            trafficData = await response.json();
 
-function speedInfo(v){
-  if(v >= 80) return ['c-good','chip-good','順暢'];
-  if(v >= 40) return ['c-warn','chip-warn','壅塞'];
-  return ['c-bad','chip-bad','嚴重壅塞'];
-}
+            if(trafficData.error) throw new Error(trafficData.error);
 
-// ── 健康檢查 ──────────────────────────────────────────────────
-async function ping(){
-  const dot = qs('dot');
-  setResult('<p class="loading">測試連線中...</p>');
-  try {
-    const r = await fetch(`${WORKER_URL}/api/ping`);
-    const d = await r.json();
-    if(d.ok){
-      dot.className = 'status-dot ok';
-      setResult(`<p class="ok-msg">✅ ${d.message}</p>`);
-    } else {
-      dot.className = 'status-dot err';
-      setResult(`<p class="err-msg">❌ ${d.error}</p>`);
-    }
-  } catch(e) {
-    dot.className = 'status-dot err';
-    setResult(`<p class="err-msg">❌ 無法連線 Worker：${e.message}<br><br>請確認 <code>config.js</code> 中的 WORKER_URL 是否正確。</p>`);
-  }
-}
+            renderTable();
+            document.getElementById('updateTime').innerText = '最後更新時間: ' + new Date().toLocaleTimeString();
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('trafficTable').style.display = 'table';
 
-// ── 查詢 ──────────────────────────────────────────────────────
-async function query(type){
-  const road      = qs('road').value;
-  const direction = qs('direction').value;
-  const kmFrom    = qs('kmFrom').value;
-  const kmTo      = qs('kmTo').value;
-  const dirLabel  = direction === 'N' ? '北上' : '南下';
-  const ts        = new Date().toLocaleTimeString('zh-TW');
-
-  setResult('<p class="loading">查詢中，請稍候...</p>');
-
-  const params = new URLSearchParams({ road, direction });
-  if(kmFrom) params.set('kmFrom', kmFrom);
-  if(kmTo)   params.set('kmTo',   kmTo);
-
-  try {
-    const res  = await fetch(`${WORKER_URL}/api/${type}?${params}`);
-    const data = await res.json();
-
-    if(data.error) return setResult(`<p class="err-msg">❌ ${data.error}</p>`);
-
-    const items = Array.isArray(data) ? data
-      : (data.LiveTrafficList || data.IncidentList || data.VDLiveList || data.value || []);
-
-    if(!items.length) return setResult('<p class="ok-msg">✅ 查無資料（目前無通報）</p>');
-
-    // ── 即時車速 ────────────────────────────────────────────
-    if(type === 'speed'){
-      const cards = items.map(item => {
-        const spd = Math.round(item.Speed ?? item.TravelSpeed ?? 0);
-        const [cv, cc, label] = speedInfo(spd);
-        const km  = typeof item.LocationMile === 'number' ? item.LocationMile.toFixed(1)+'K' : (item.SectionID||'-');
-        const sec = item.SectionName || item.RoadSectionName || '';
-        return `<div class="speed-card">
-          <div class="speed-km">${km}${sec?' · '+sec:''}</div>
-          <div class="speed-val ${cv}">${spd}<span class="speed-unit"> km/h</span></div>
-          <span class="chip ${cc}">${label}</span>
-        </div>`;
-      }).join('');
-
-      setResult(`
-        <div class="r-head"><strong>${roadName[road]} ${dirLabel} 即時車速</strong><span>更新 ${ts} · ${items.length} 個偵測點</span></div>
-        <div class="speed-grid">${cards}</div>
-        <details class="raw"><summary>原始 JSON</summary><pre>${JSON.stringify(items.slice(0,8),null,2)}</pre></details>
-      `);
-
-    // ── 事故施工 ────────────────────────────────────────────
-    } else if(type === 'incident'){
-      const rows = items.map(item => {
-        const dir  = item.Direction==='N'?'北上':item.Direction==='S'?'南下':(item.Direction||'');
-        const km   = item.LocationMile ? item.LocationMile.toFixed(1)+'K' : '';
-        const time = item.StartTime ? ` · ${item.StartTime}` : '';
-        return `<div class="incident">
-          <div class="incident-meta">${km} ${dir}${time}</div>
-          <div class="incident-type">${item.IncidentType||item.EventType||'事件'}</div>
-          <div class="incident-desc">${item.Description||item.Comment||''}</div>
-        </div>`;
-      }).join('');
-
-      setResult(`
-        <div class="r-head"><strong>${roadName[road]} 事故 / 施工</strong><span>更新 ${ts} · ${items.length} 筆</span></div>
-        ${rows}
-      `);
-
-    // ── VD 偵測器 ───────────────────────────────────────────
-    } else if(type === 'vd'){
-      const cards = items.map(item => {
-        const spd = Math.round(item.Speed ?? 0);
-        const [cv, cc, label] = speedInfo(spd);
-        const occ = item.Occupancy != null ? item.Occupancy.toFixed(1)+'%' : '-';
-        const vol = item.Volume ?? '-';
-        return `<div class="speed-card">
-          <div class="speed-km">${item.VDID||item.SectionID||'-'}</div>
-          <div class="speed-val ${cv}">${spd}<span class="speed-unit"> km/h</span></div>
-          <span class="chip ${cc}">${label}</span>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px;">流量 ${vol} 輛 · 佔有率 ${occ}</div>
-        </div>`;
-      }).join('');
-
-      setResult(`
-        <div class="r-head"><strong>${roadName[road]} ${dirLabel} VD 偵測器</strong><span>更新 ${ts} · ${items.length} 筆</span></div>
-        <div class="speed-grid">${cards}</div>
-        <details class="raw"><summary>原始 JSON</summary><pre>${JSON.stringify(items.slice(0,5),null,2)}</pre></details>
-      `);
+        } catch (error) {
+            console.error("Fetch error:", error);
+            document.getElementById('loading').innerHTML = `<span class="error">資料載入失敗：${error.message}</span>`;
+        }
     }
 
-  } catch(e){
-    setResult(`<p class="err-msg">❌ 請求失敗：${e.message}</p>`);
-  }
-}
+    function formatDirection(dir) {
+        const dirMap = { 'N': '北上', 'S': '南下', 'E': '東向', 'W': '西向' };
+        return dirMap[dir] || dir;
+    }
 
-// 頁面載入時自動 ping
-window.addEventListener('load', () => {
-  if(typeof WORKER_URL !== 'undefined' && !WORKER_URL.includes('YOUR_WORKER')) {
-    ping();
-  }
-});
+    function renderTable() {
+        const body = document.getElementById('trafficBody');
+        const filter = document.getElementById('search').value.toLowerCase();
+        body.innerHTML = '';
+
+        trafficData.forEach(item => {
+            if (item.name.toLowerCase().includes(filter)) {
+                let speedClass = 'speed-green';
+                if (item.speed < 40) speedClass = 'speed-red';
+                else if (item.speed < 70) speedClass = 'speed-orange';
+
+                const row = `<tr>
+                    <td><strong>${item.name}</strong></td>
+                    <td>${formatDirection(item.direction)}</td>
+                    <td><span class="speed-tag ${speedClass}">${item.speed}</span> km/h</td>
+                </tr>`;
+                body.insertAdjacentHTML('beforeend', row);
+            }
+        });
+    }
+
+    document.getElementById('search').addEventListener('input', renderTable);
+
+    // 初始執行與定時更新 (3分鐘)
+    fetchTrafficData();
+    setInterval(fetchTrafficData, 180000);
 </script>
+
 </body>
 </html>
