@@ -1,56 +1,44 @@
 /**
- * Cloudflare Worker — TDX 高速公路路況代理 v5b
- * 修正：Service Worker 語法用 self.TDX_CLIENT_ID 讀環境變數
- *       （不是 event.env，那是 ES Module 語法）
+ * Cloudflare Worker — TDX 高速公路路況代理 v6
+ * 修正：正確 base URL = https://tdx.transportdata.tw/api/basic
+ * 路況 API 路徑：/v2/Road/Traffic/Live/Freeway
+ * VD  API 路徑：/v2/Road/Traffic/VD/Freeway
  */
 
-const TOKEN_URL    = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
-const TRAFFIC_BASE = 'https://traffic.transportdata.tw/MOTC';
+const TOKEN_URL = 'https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token';
+const API_BASE  = 'https://tdx.transportdata.tw/api/basic';
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
-let cachedToken = null;
-let tokenExpiry  = 0;
+var cachedToken = null;
+var tokenExpiry  = 0;
 
-// ── 讀環境變數（Service Worker 語法用 self.XXX）──────────────
 function getEnv(key) {
-  // Service Worker 模式：變數掛在 global scope（即 self）
   if (typeof self !== 'undefined' && self[key]) return self[key];
-  // 萬一是 ES Module 模式（不應該，但保險）
-  if (typeof globalThis !== 'undefined' && globalThis[key]) return globalThis[key];
   return undefined;
 }
 
-// ── Token ────────────────────────────────────────────────────
 async function getToken() {
   if (cachedToken && Date.now() < tokenExpiry) return cachedToken;
 
-  const clientId     = getEnv('TDX_CLIENT_ID');
-  const clientSecret = getEnv('TDX_CLIENT_SECRET');
+  var clientId     = getEnv('TDX_CLIENT_ID');
+  var clientSecret = getEnv('TDX_CLIENT_SECRET');
 
-  if (!clientId || !clientSecret) {
-    throw new Error(
-      '環境變數未設定。請到 Cloudflare Worker → Settings → Variables and Secrets ' +
-      '新增 TDX_CLIENT_ID 和 TDX_CLIENT_SECRET，然後 Save and deploy。' +
-      '（目前讀到 clientId=' + clientId + '）'
-    );
-  }
+  if (!clientId || !clientSecret)
+    throw new Error('環境變數未設定：TDX_CLIENT_ID / TDX_CLIENT_SECRET');
 
-  const res = await fetch(TOKEN_URL, {
+  var res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type:    'client_credentials',
-      client_id:     clientId,
-      client_secret: clientSecret,
-    }).toString(),
+    body: 'grant_type=client_credentials&client_id=' + encodeURIComponent(clientId) +
+          '&client_secret=' + encodeURIComponent(clientSecret),
   });
 
-  const text = await res.text();
+  var text = await res.text();
   if (!res.ok) {
     var msg = text;
     try { msg = JSON.parse(text).error_description || msg; } catch(_) {}
@@ -63,11 +51,9 @@ async function getToken() {
   return cachedToken;
 }
 
-// ── 呼叫 traffic.transportdata.tw ────────────────────────────
-async function trafficGet(path) {
+async function apiGet(path) {
   var token = await getToken();
-  var url   = TRAFFIC_BASE + path;
-  var res   = await fetch(url, {
+  var res   = await fetch(API_BASE + path, {
     headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' },
   });
   var text = await res.text();
@@ -86,14 +72,13 @@ function jsonResp(data, status) {
   });
 }
 
-function levelOf(speed) {
-  if (speed <= 0)  return '無資料';
-  if (speed >= 80) return '順暢';
-  if (speed >= 40) return '壅塞';
+function levelOf(spd) {
+  if (spd <= 0)  return '無資料';
+  if (spd >= 80) return '順暢';
+  if (spd >= 40) return '壅塞';
   return '嚴重壅塞';
 }
 
-// ── 主處理 ───────────────────────────────────────────────────
 async function handleRequest(request) {
   var url      = new URL(request.url);
   var pathname = url.pathname;
@@ -113,49 +98,47 @@ async function handleRequest(request) {
       return jsonResp({ ok: true, message: 'Token 取得成功，Worker 運作正常' });
     }
 
-    // /api/debug — 確認環境變數
+    // /api/debug
     if (pathname === '/api/debug') {
       var cid = getEnv('TDX_CLIENT_ID');
-      var cs  = getEnv('TDX_CLIENT_SECRET');
       return jsonResp({
         hasClientId:     !!cid,
-        hasClientSecret: !!cs,
-        clientIdPrefix:  cid ? cid.slice(0, 8) + '...' : '未設定',
-        trafficBase:     TRAFFIC_BASE,
-        note: '如果 hasClientId=false，請到 Worker Settings → Variables and Secrets 新增後 Save and deploy',
+        hasClientSecret: !!getEnv('TDX_CLIENT_SECRET'),
+        clientIdPrefix:  cid ? cid.slice(0,8)+'...' : '未設定',
+        apiBase:         API_BASE,
       });
     }
 
-    // /api/speed?road=1&direction=N
+    // /api/speed?road=1&direction=N&kmFrom=150&kmTo=200
     if (pathname === '/api/speed') {
-      var conditions = [];
-      if (road)      conditions.push("contains(SectionID,'" + road + "')");
-      if (direction) conditions.push("Direction eq '" + direction + "'");
-      if (kmFrom)    conditions.push('StartMileage ge ' + kmFrom);
-      if (kmTo)      conditions.push('EndMileage le '   + kmTo);
+      var conds = [];
+      if (direction) conds.push("Direction eq '" + direction + "'");
+      if (kmFrom)    conds.push('StartMileage ge ' + kmFrom);
+      if (kmTo)      conds.push('EndMileage le '   + kmTo);
 
-      var filterStr = conditions.length
-        ? '$filter=' + encodeURIComponent(conditions.join(' and ')) + '&'
-        : '';
+      // 國道用路徑參數傳入，不用 OData filter
+      var roadPath = road ? '/N' + road : '';
+      var qs = '$format=JSON&$top=200';
+      if (conds.length) qs = '$filter=' + encodeURIComponent(conds.join(' and ')) + '&' + qs;
 
-      var data = await trafficGet('/v2/Road/Traffic/Live/Freeway?' + filterStr + '$format=JSON&$top=200');
-
+      var data  = await apiGet('/v2/Road/Traffic/Live/Freeway' + roadPath + '?' + qs);
       var items = [];
-      if (Array.isArray(data))                              items = data;
-      else if (data.LiveTrafficList && data.LiveTrafficList.LiveTraffic) items = data.LiveTrafficList.LiveTraffic;
-      else if (data.value)                                  items = data.value;
+      if (Array.isArray(data))                items = data;
+      else if (data.LiveTraffics)             items = data.LiveTraffics;
+      else if (data.LiveTrafficList)          items = data.LiveTrafficList.LiveTraffic || [];
+      else if (data.value)                    items = data.value;
 
       var sections = items.map(function(item) {
-        var spd = parseInt(item.TravelSpeed || 0, 10);
+        var spd = parseInt(item.TravelSpeed || item.Speed || 0, 10);
         return {
-          sectionId:    item.SectionID || '',
-          direction:    item.Direction === 'N' ? '北上' : item.Direction === 'S' ? '南下' : (item.Direction || ''),
-          directionRaw: item.Direction || '',
-          startMile:    parseFloat(item.StartMileage || 0) || 0,
-          endMile:      parseFloat(item.EndMileage   || 0) || 0,
-          speed:        spd,
-          travelTime:   parseInt(item.TravelTime || 0, 10) || 0,
-          level:        levelOf(spd),
+          sectionId:  item.SectionID   || item.SectionId   || '',
+          direction:  item.Direction === 'N' ? '北上' : item.Direction === 'S' ? '南下' : (item.Direction || ''),
+          startMile:  parseFloat(item.StartMileage || item.StartMile || 0) || 0,
+          endMile:    parseFloat(item.EndMileage   || item.EndMile   || 0) || 0,
+          speed:      spd,
+          travelTime: parseInt(item.TravelTime || 0, 10) || 0,
+          level:      levelOf(spd),
+          updateTime: item.DataCollectTime || item.UpdateTime || '',
         };
       });
 
@@ -169,21 +152,19 @@ async function handleRequest(request) {
 
     // /api/incident?road=1
     if (pathname === '/api/incident') {
-      var filterStr = road
-        ? '$filter=' + encodeURIComponent("contains(RoadNo,'N" + road + "')") + '&'
-        : '';
-      var data = await trafficGet('/v2/Road/Traffic/Incident/Freeway?' + filterStr + '$format=JSON&$top=50');
-
+      var roadPath = road ? '/N' + road : '';
+      var data  = await apiGet('/v2/Road/Traffic/Incident/Freeway' + roadPath + '?$format=JSON&$top=50');
       var items = [];
-      if (Array.isArray(data))                              items = data;
-      else if (data.IncidentList && data.IncidentList.Incident) items = data.IncidentList.Incident;
-      else if (data.value)                                  items = data.value;
+      if (Array.isArray(data))       items = data;
+      else if (data.Incidents)       items = data.Incidents;
+      else if (data.IncidentList)    items = data.IncidentList.Incident || [];
+      else if (data.value)           items = data.value;
 
       var events = items.map(function(e) {
         return {
-          roadNo:      e.RoadNo || '',
+          roadNo:      e.RoadNo || e.FreewayID || '',
           direction:   e.Direction === 'N' ? '北上' : e.Direction === 'S' ? '南下' : (e.Direction || ''),
-          milestone:   parseFloat(e.Mileage || 0) || 0,
+          milestone:   parseFloat(e.Mileage || e.Milestone || 0) || 0,
           eventType:   e.IncidentType || e.EventType || '',
           description: e.Description || e.Memo || '',
           startTime:   e.StartTime || '',
@@ -198,14 +179,14 @@ async function handleRequest(request) {
       });
     }
 
-    // /api/raw — 除錯用
+    // /api/raw?path=/v2/Road/Traffic/Live/Freeway/N1 — 除錯
     if (pathname === '/api/raw') {
-      var p    = url.searchParams.get('path') || '/v2/Road/Traffic/Live/Freeway';
-      var data = await trafficGet(p + '?$format=JSON&$top=1');
-      return jsonResp({ raw: data });
+      var p    = url.searchParams.get('path') || '/v2/Road/Traffic/Live/Freeway/N1';
+      var data = await apiGet(p + '?$format=JSON&$top=2');
+      return jsonResp(data);
     }
 
-    return jsonResp({ error: '路由不存在' }, 404);
+    return jsonResp({ error: '路由不存在。可用：/api/ping /api/debug /api/speed /api/incident /api/raw' }, 404);
 
   } catch(e) {
     return jsonResp({ error: e.message }, 500);
